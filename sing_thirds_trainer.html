@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sing Thirds Trainer — Enhanced Version</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7dd3fc;--muted:#94a3b8;--good:#34d399;--bad:#fb7185}
+    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;color: #e6eef8;background:linear-gradient(180deg,#071022 0%, #071a2a 100%);}    
+    .app{max-width:980px;margin:26px auto;padding:20px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 8px 30px rgba(2,6,23,0.7)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:4px 0 18px;color:var(--muted)}
+    .row{display:flex;gap:18px}
+    .col{flex:1}
+    .controls{width:360px;background:rgba(255,255,255,0.02);padding:16px;border-radius:10px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    select,input[type=range],button,input[type=file]{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#071826;color:inherit}
+    button{cursor:pointer;margin-top:8px}
+    .tiny{font-size:12px;padding:6px}
+    .status{margin-top:10px;font-size:13px}
+    canvas{width:100%;height:240px;border-radius:10px;background:linear-gradient(180deg,#071826,#04131b);display:block}
+    .info{margin-top:8px;color:var(--muted);font-size:13px}
+    .big{font-size:22px;font-weight:600}
+    .green{color:var(--good)}
+    .red{color:var(--bad)}
+    .row-between{display:flex;justify-content:space-between;align-items:center}
+    .hint{margin-top:10px;padding:10px;background:rgba(255,255,255,0.01);border-radius:8px;font-size:13px;color:var(--muted)}
+    .footer{margin-top:12px;color:var(--muted);font-size:12px}
+    .note-pill{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.03);margin-right:6px}
+    .controls .row{flex-direction:row}
+    .small-muted{font-size:12px;color:var(--muted)}
+    .kbd{background:#071826;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.02);display:inline-block}
+    .btn-group{display:flex;gap:8px;margin-top:10px}
+    .btn-group button{margin-top:0;flex:1}
+    @media (max-width:860px){.row{flex-direction:column}.controls{width:100%}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Sing Thirds Trainer</h1>
+    <p class="lead">Click "New Random Note" to get a random root note, then sing the third. The app listens and shows how close you are in cents.</p>
+
+    <div class="row">
+      <div class="controls col">
+        <label>Current Exercise</label>
+        <div id="currentExercise" style="font-size:16px;font-weight:600;margin-bottom:10px;">Click "New Random Note" to start</div>
+
+        <div class="btn-group">
+          <button id="newRandomNote" class="tiny">🎲 New Random Note</button>
+          <button id="replayNote" class="tiny" disabled>🔄 Replay</button>
+        </div>
+
+        <div class="btn-group">
+          <button id="playRoot" class="tiny" disabled>▶ Play Root</button>
+          <button id="playTarget" class="tiny" disabled>▶ Play Target</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <label style="margin-bottom:8px;display:block">Third Type</label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <label><input type="radio" name="thirdType" value="major" checked /> Major (up)</label>
+            <label><input type="radio" name="thirdType" value="minor" /> Minor (up)</label>
+            <label><input type="radio" name="thirdType" value="major-down" /> Major (down)</label>
+            <label><input type="radio" name="thirdType" value="minor-down" /> Minor (down)</label>
+          </div>
+          <div style="margin-top:8px">
+            <label><input type="checkbox" id="randomDirection" /> Random direction (up/down)</label>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="margin">Margin (cents): <span id="marginValue">50</span>¢</label>
+          <input id="margin" type="range" min="10" max="200" value="50" />
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="holdMs">Hold threshold (ms) to register correct</label>
+          <input id="holdMs" type="range" min="50" max="1000" value="300" />
+          <div class="info">Hold for <span id="holdValue">300</span> ms while inside margin to score.</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <button id="startMic" class="tiny">🎤 Enable Microphone</button>
+          <button id="retryPerm" class="tiny" style="margin-left:8px;display:none">Retry permission</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <label class="small-muted">Fallback: upload an audio clip</label>
+          <input id="fileInput" type="file" accept="audio/*" />
+          <button id="useFile" class="tiny">Use uploaded audio as input</button>
+        </div>
+
+        <div class="status" id="status">Mic status: <span id="micStatus">not started</span></div>
+
+        <div class="hint">
+          If microphone issues persist, try: <br>
+          1. Check browser permissions (🔒 icon in address bar)<br>
+          2. For file:// URLs, run: <code class="kbd">python -m http.server 8000</code><br>
+          3. Use Chrome/Firefox for best compatibility
+        </div>
+
+        <div class="hint small-muted">Tip: Start with larger margin (80¢–120¢) and reduce as you improve.</div>
+      </div>
+
+      <div class="col">
+        <canvas id="viz" width="800" height="320"></canvas>
+        <div class="row-between" style="margin-top:10px">
+          <div>
+            <div class="big" id="detectedNote">—</div>
+            <div class="info">Detected: <span id="detectedFreq">—</span> Hz · <span id="detectedCents">—</span>¢</div>
+          </div>
+          <div style="text-align:right">
+            <div class="info">Root: <span id="rootNote">—</span> · <span id="rootFreq">—</span> Hz</div>
+            <div class="info">Target: <span id="targetNote">—</span> · <span id="targetFreq">—</span> Hz</div>
+            <div class="info">Inside margin: <span id="inside">no</span></div>
+            <div class="info" style="margin-top:6px">Score: <span id="score">0</span></div>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:12px">
+          How it works: Random notes from vocal range (C3-C5). Major third = 4 semitones (400¢), minor third = 3 semitones (300¢). Up/down refers to singing higher or lower than the root. Green meter means you're in tune!
+        </div>
+
+        <div id="filePlayerHolder" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    // --- Utilities: notes / freqs ---
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    function midiToFreq(m){ return 440 * Math.pow(2, (m - 69)/12); }
+    function noteNameFromMidi(m){ const name = NOTE_NAMES[m % 12]; const oct = Math.floor(m/12) - 1; return name + oct; }
+    function freqToMidi(f){ return 69 + 12 * Math.log2(f/440); }
+    function freqToNoteName(f){ const m = Math.round(freqToMidi(f)); return noteNameFromMidi(m); }
+    function centsBetween(f1,f2){ return 1200 * Math.log2(f1/f2); }
+
+    // Vocal range for random notes (C3 to C5)
+    const VOCAL_RANGE = { min: 48, max: 72 }; // MIDI notes
+
+    // DOM refs
+    const currentExercise = document.getElementById('currentExercise');
+    const newRandomNoteBtn = document.getElementById('newRandomNote');
+    const replayNoteBtn = document.getElementById('replayNote');
+    const playRootBtn = document.getElementById('playRoot');
+    const playTargetBtn = document.getElementById('playTarget');
+    const startMicBtn = document.getElementById('startMic');
+    const retryPermBtn = document.getElementById('retryPerm');
+    const marginSlider = document.getElementById('margin');
+    const marginValue = document.getElementById('marginValue');
+    const holdMs = document.getElementById('holdMs');
+    const holdValue = document.getElementById('holdValue');
+    const micStatus = document.getElementById('micStatus');
+    const detectedNoteEl = document.getElementById('detectedNote');
+    const detectedFreqEl = document.getElementById('detectedFreq');
+    const detectedCentsEl = document.getElementById('detectedCents');
+    const rootNoteEl = document.getElementById('rootNote');
+    const rootFreqEl = document.getElementById('rootFreq');
+    const targetNoteEl = document.getElementById('targetNote');
+    const targetFreqEl = document.getElementById('targetFreq');
+    const insideEl = document.getElementById('inside');
+    const scoreEl = document.getElementById('score');
+    const fileInput = document.getElementById('fileInput');
+    const useFileBtn = document.getElementById('useFile');
+    const filePlayerHolder = document.getElementById('filePlayerHolder');
+
+    // audio / analysis
+    let audioCtx = null;
+    let analyser = null;
+    let inputSourceNode = null;
+    let dataBuf = null;
+    let stream = null; // Keep reference to stream
+
+    // fallback file audio elements
+    let fileAudioEl = null;
+    let fileObjectUrl = null;
+
+    // settings/state
+    let rootMidi = null;
+    let rootFreq = null;
+    let thirdType = 'major';
+    let targetFreq = null;
+    let marginCents = parseInt(marginSlider.value);
+    let holdThreshold = parseInt(holdMs.value);
+
+    let lastInsideAt = 0; 
+    let score = 0;
+
+    // drawing
+    const canvas = document.getElementById('viz');
+    const ctx = canvas.getContext('2d');
+
+    function ensureAudio(){
+      if(!audioCtx){ 
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if(audioCtx.state === 'suspended'){
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function generateRandomNote(){
+      const midi = Math.floor(Math.random() * (VOCAL_RANGE.max - VOCAL_RANGE.min + 1)) + VOCAL_RANGE.min;
+      return midi;
+    }
+
+    function updateUIValues(){
+      if(rootMidi === null) return;
+      
+      rootFreq = midiToFreq(rootMidi);
+      const t = document.querySelector('input[name="thirdType"]:checked');
+      thirdType = t ? t.value : 'major';
+      
+      // Calculate target frequency based on third type
+      let semitones;
+      let direction;
+      if(thirdType === 'major') {
+        semitones = 4;
+        direction = 'up';
+      } else if(thirdType === 'minor') {
+        semitones = 3;
+        direction = 'up';
+      } else if(thirdType === 'major-down') {
+        semitones = -4;
+        direction = 'down';
+      } else if(thirdType === 'minor-down') {
+        semitones = -3;
+        direction = 'down';
+      }
+      
+      targetFreq = rootFreq * Math.pow(2, semitones/12);
+
+      rootNoteEl.textContent = noteNameFromMidi(rootMidi);
+      rootFreqEl.textContent = rootFreq.toFixed(2);
+      targetNoteEl.textContent = freqToNoteName(targetFreq);
+      targetFreqEl.textContent = targetFreq.toFixed(2);
+      
+      // Enhanced exercise description
+      const thirdName = thirdType.includes('major') ? 'Major' : 'Minor';
+      const directionText = direction === 'up' ? '↑' : '↓';
+      currentExercise.textContent = `${noteNameFromMidi(rootMidi)} → ${thirdName} Third ${directionText} (${freqToNoteName(targetFreq)})`;
+    }
+
+    // Event listeners
+    newRandomNoteBtn.addEventListener('click', ()=>{
+      rootMidi = generateRandomNote();
+      
+      // If random direction is enabled, randomly select third type
+      const randomDirectionCheckbox = document.getElementById('randomDirection');
+      if(randomDirectionCheckbox.checked) {
+        const thirdTypes = ['major', 'minor', 'major-down', 'minor-down'];
+        const randomType = thirdTypes[Math.floor(Math.random() * thirdTypes.length)];
+        document.querySelector(`input[name="thirdType"][value="${randomType}"]`).checked = true;
+      }
+      
+      updateUIValues();
+      drawOnce();
+      
+      // Enable other buttons
+      replayNoteBtn.disabled = false;
+      playRootBtn.disabled = false;
+      playTargetBtn.disabled = false;
+      
+      // Auto-play the root note for immediate feedback
+      setTimeout(() => playTone(rootFreq, 2.0), 100);
+    });
+
+    replayNoteBtn.addEventListener('click', ()=>{
+      if(rootFreq) playTone(rootFreq, 2.0);
+    });
+
+    document.querySelectorAll('input[name="thirdType"]').forEach(r=>r.addEventListener('change', ()=>{ 
+      updateUIValues(); 
+      drawOnce(); 
+    }));
+
+    marginSlider.addEventListener('input', ()=>{ 
+      marginCents = parseInt(marginSlider.value); 
+      marginValue.textContent = marginCents; 
+    });
+
+    holdMs.addEventListener('input', ()=>{ 
+      holdThreshold = parseInt(holdMs.value); 
+      holdValue.textContent = holdThreshold; 
+    });
+
+    // play tones - increased duration and improved envelope
+    function playTone(frequency, duration = 2.0){
+      const ctx = ensureAudio();
+      if(ctx.state === 'suspended') ctx.resume();
+      
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      
+      // Use a warmer sine wave
+      o.type = 'sine';
+      o.frequency.value = frequency;
+      o.connect(g);
+      g.connect(ctx.destination);
+      
+      const now = ctx.currentTime;
+      // Smoother envelope for better listening
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.3, now + 0.05);  // Gentle attack
+      g.gain.setValueAtTime(0.3, now + duration - 0.2);  // Sustain
+      g.gain.exponentialRampToValueAtTime(0.001, now + duration); // Gentle release
+      
+      o.start(now);
+      o.stop(now + duration + 0.1);
+    }
+
+    playRootBtn.addEventListener('click', ()=>{ 
+      if(rootFreq) playTone(rootFreq, 2.0); 
+    });
+
+    playTargetBtn.addEventListener('click', ()=>{ 
+      updateUIValues(); 
+      if(targetFreq) playTone(targetFreq, 2.0); 
+    });
+
+    // ------- Enhanced microphone handling -------
+
+    function supportsPermissionsAPI(){ 
+      return !!(navigator.permissions && navigator.permissions.query); 
+    }
+
+    async function getMicPermissionState(){
+      if(!supportsPermissionsAPI()) return null;
+      try{ 
+        const s = await navigator.permissions.query({ name: 'microphone' }); 
+        return s.state; 
+      }catch(e){ 
+        return null; 
+      }
+    }
+
+    startMicBtn.addEventListener('click', async ()=>{
+      if(inputSourceNode){ 
+        stopListening(); 
+        return; 
+      }
+
+      try{
+        await startListeningWithMic();
+      }catch(err){
+        handleGetUserMediaError(err);
+      }
+    });
+
+    retryPermBtn.addEventListener('click', async ()=>{
+      try{ 
+        await startListeningWithMic(); 
+      }catch(err){ 
+        handleGetUserMediaError(err); 
+      }
+    });
+
+    async function startListeningWithMic(){
+      micStatus.textContent = 'requesting permission...';
+      const ctx = ensureAudio();
+
+      // Enhanced constraints for better audio capture
+      const constraints = { 
+        audio: { 
+          channelCount: 1,
+          sampleRate: 44100,
+          sampleSize: 16,
+          echoCancellation: false,  // Better for pitch detection
+          noiseSuppression: false,  // Better for pitch detection
+          autoGainControl: false    // Better for pitch detection
+        } 
+      };
+
+      try{
+        // Stop any existing stream first
+        if(stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
+        
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }catch(err){
+        throw err;
+      }
+
+      // Create enhanced analyser
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 4096;  // Higher resolution for better pitch detection
+      analyser.smoothingTimeConstant = 0.3;  // Less smoothing for responsiveness
+      dataBuf = new Float32Array(analyser.fftSize);
+
+      inputSourceNode = ctx.createMediaStreamSource(stream);
+      inputSourceNode.connect(analyser);
+
+      micStatus.textContent = '🎤 listening - start singing!';
+      startMicBtn.textContent = '🛑 Stop Microphone';
+      retryPermBtn.style.display = 'none';
+      
+      // Start the detection loop
+      drawLoop();
+    }
+
+    function handleGetUserMediaError(err){
+      console.error('getUserMedia error', err);
+      const name = err && err.name ? err.name : (err && err.message ? err.message : String(err));
+      
+      if(name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'PermissionDenied'){
+        micStatus.textContent = '❌ Permission denied - please allow microphone access';
+        retryPermBtn.style.display = 'inline-block';
+        showPermissionHelp();
+      }else if(name === 'NotFoundError' || name === 'DevicesNotFoundError'){
+        micStatus.textContent = '❌ No microphone found';
+      }else{
+        micStatus.textContent = '❌ Microphone error: ' + name;
+      }
+    }
+
+    function showPermissionHelp(){
+      const existing = document.getElementById('permHelp');
+      if(existing) existing.remove();
+      
+      const h = document.createElement('div');
+      h.className = 'hint';
+      h.style.marginTop = '8px';
+      h.id = 'permHelp';
+      h.innerHTML = '<strong>🔧 Microphone Fix:</strong><br>1. Click the 🔒 icon in address bar → Allow microphone<br>2. Refresh the page<br>3. For file:// URLs, use a local server instead';
+      document.querySelector('.controls').appendChild(h);
+    }
+
+    function stopListening(){
+      try{ 
+        if(inputSourceNode){ 
+          inputSourceNode.disconnect(); 
+          inputSourceNode = null; 
+        } 
+      }catch(e){}
+      
+      try{
+        if(stream) {
+          stream.getTracks().forEach(track => track.stop());
+          stream = null;
+        }
+      }catch(e){}
+      
+      try{ 
+        if(fileAudioEl){ 
+          fileAudioEl.pause(); 
+          fileAudioEl.src = ''; 
+          fileAudioEl.remove(); 
+          fileAudioEl = null; 
+        } 
+      }catch(e){}
+      
+      if(rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      
+      analyser = null; 
+      dataBuf = null;
+      startMicBtn.textContent = '🎤 Enable Microphone';
+      micStatus.textContent = 'stopped';
+    }
+
+    // file upload fallback
+    useFileBtn.addEventListener('click', async ()=>{
+      if(!fileInput.files || fileInput.files.length === 0){ 
+        alert('Choose an audio file first.'); 
+        return; 
+      }
+      
+      stopListening();
+      const file = fileInput.files[0];
+
+      if(fileAudioEl){ 
+        try{ 
+          fileAudioEl.pause(); 
+          fileAudioEl.remove(); 
+        }catch(e){} 
+      }
+      
+      fileObjectUrl = URL.createObjectURL(file);
+      fileAudioEl = document.createElement('audio'); 
+      fileAudioEl.controls = true; 
+      fileAudioEl.src = fileObjectUrl;
+      filePlayerHolder.innerHTML = ''; 
+      filePlayerHolder.appendChild(fileAudioEl);
+
+      const ctx = ensureAudio();
+      analyser = ctx.createAnalyser(); 
+      analyser.fftSize = 4096; 
+      dataBuf = new Float32Array(analyser.fftSize);
+
+      try{
+        inputSourceNode = ctx.createMediaElementSource(fileAudioEl);
+        inputSourceNode.connect(analyser);
+        micStatus.textContent = '📁 listening (file input) — play the clip';
+        startMicBtn.textContent = '🛑 Stop Input';
+        drawLoop();
+      }catch(e){
+        micStatus.textContent = 'Error using file: ' + (e && e.message ? e.message : e);
+      }
+    });
+
+    // ------- Enhanced pitch detection -------
+    function autoCorrelate(buf, sampleRate){
+      const SIZE = buf.length;
+      let rms = 0;
+      
+      // Calculate RMS for volume detection
+      for(let i=0; i<SIZE; i++){ 
+        const val = buf[i]; 
+        rms += val*val; 
+      }
+      rms = Math.sqrt(rms / SIZE);
+      
+      // More sensitive threshold for singing
+      if(rms < 0.003) return -1; 
+
+      const MAX_SAMPLES = Math.floor(SIZE/2);
+      let bestOffset = -1; 
+      let bestCorrelation = 0;
+      const correlations = new Float32Array(MAX_SAMPLES);
+
+      // Enhanced autocorrelation
+      for(let offset = 4; offset < MAX_SAMPLES; offset++){
+        let correlation = 0;
+        for(let i = 0; i < MAX_SAMPLES; i++){
+          correlation += Math.abs(buf[i] - buf[i + offset]);
+        }
+        correlation = 1 - (correlation / MAX_SAMPLES);
+        correlations[offset] = correlation;
+        
+        if(correlation > bestCorrelation){ 
+          bestCorrelation = correlation; 
+          bestOffset = offset; 
+        }
+      }
+
+      // More sensitive correlation threshold
+      if(bestCorrelation > 0.3 && bestOffset > 4){
+        // Parabolic interpolation for sub-sample accuracy
+        const prev = (bestOffset - 1 >= 0) ? correlations[bestOffset - 1] : correlations[bestOffset];
+        const next = (bestOffset + 1 < correlations.length) ? correlations[bestOffset + 1] : correlations[bestOffset];
+        const denom = (2 * correlations[bestOffset] - prev - next);
+        const shift = denom === 0 ? 0 : (next - prev) / (2 * denom);
+        const adjustedOffset = bestOffset + (isFinite(shift) ? shift : 0);
+        const frequency = sampleRate / adjustedOffset;
+        
+        // Extended frequency range for singing
+        if(frequency > 60 && frequency < 1200) return frequency;
+      }
+      return -1;
+    }
+
+    // Enhanced smoothing for more stable readings
+    let latestDetected = -1;
+    const smoothing = { buffer: [], maxlen: 8 };
+    
+    function smoothFreq(f){
+      if(f <= 0) return -1;
+      
+      smoothing.buffer.push(f);
+      if(smoothing.buffer.length > smoothing.maxlen) smoothing.buffer.shift();
+      
+      // Use median for stability
+      const copy = smoothing.buffer.slice().sort((a,b)=>a-b);
+      return copy[Math.floor(copy.length/2)];
+    }
+
+    // ------- drawing & detection loop -------
+    function drawOnce(){
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0,0,rect.width,rect.height);
+      
+      // Enhanced background
+      const gradient = ctx.createLinearGradient(0, 0, 0, rect.height);
+      gradient.addColorStop(0, '#031826');
+      gradient.addColorStop(1, '#01121a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0,0,rect.width,rect.height);
+      
+      // Grid lines
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      for(let i=0;i<6;i++){ 
+        ctx.fillRect(0, i*(rect.height/6), rect.width, 1); 
+      }
+      
+      // Center line
+      ctx.beginPath(); 
+      ctx.moveTo(rect.width/2, 0); 
+      ctx.lineTo(rect.width/2, rect.height); 
+      ctx.strokeStyle = 'rgba(125,211,252,0.4)'; 
+      ctx.lineWidth = 2; 
+      ctx.stroke();
+      
+      // Target label
+      ctx.fillStyle = 'rgba(125,211,252,0.9)'; 
+      ctx.font = '14px monospace'; 
+      ctx.fillText('🎯 Target', rect.width/2 - 32, 18);
+    }
+
+    function drawMeter(cents){
+      const rect = canvas.getBoundingClientRect();
+      const maxCents = 300;
+      const cx = rect.width/2; 
+      const cy = rect.height/2;
+
+      ctx.clearRect(0,0,rect.width,rect.height);
+      
+      // Enhanced background gradient
+      const g = ctx.createLinearGradient(0,0,0,rect.height);
+      g.addColorStop(0, '#031826'); 
+      g.addColorStop(1, '#01121a'); 
+      ctx.fillStyle = g; 
+      ctx.fillRect(0,0,rect.width,rect.height);
+
+      // Enhanced grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; 
+      ctx.lineWidth = 1;
+      for(let s=-3; s<=3; s++){ 
+        const x = cx + (s*(rect.width*0.12)); 
+        ctx.beginPath(); 
+        ctx.moveTo(x,20); 
+        ctx.lineTo(x,rect.height-20); 
+        ctx.stroke(); 
+      }
+
+      // Target zone
+      const marginPx = (Math.min(maxCents, marginCents) / maxCents) * (rect.width*0.42);
+      ctx.fillStyle = 'rgba(52,211,153,0.15)'; 
+      ctx.fillRect(cx - marginPx, 30, marginPx*2, rect.height-60);
+
+      // Center target line
+      ctx.strokeStyle = 'rgba(125,211,252,0.6)'; 
+      ctx.lineWidth = 2; 
+      ctx.beginPath(); 
+      ctx.moveTo(cx, 30); 
+      ctx.lineTo(cx, rect.height-30); 
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(125,211,252,0.9)'; 
+      ctx.font = '13px monospace'; 
+      ctx.fillText('🎯 Target (0¢)', cx-50, 20);
+
+      if(cents === null || isNaN(cents)){
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'; 
+        ctx.font = '16px monospace'; 
+        ctx.fillText('🎤 Sing now...', 20, cy);
+      }else{
+        const clampedCents = Math.max(-maxCents, Math.min(maxCents, cents));
+        const x = cx + (clampedCents / maxCents) * (rect.width*0.42);
+        const inside = Math.abs(cents) <= marginCents;
+        
+        // Enhanced indicator
+        ctx.beginPath(); 
+        ctx.arc(x, cy, 14, 0, Math.PI*2);
+        ctx.fillStyle = inside ? 'rgba(52,211,153,0.95)' : 'rgba(251,113,133,0.95)'; 
+        ctx.fill();
+        
+        // Glow effect for correct notes
+        if(inside) {
+          ctx.shadowColor = 'rgba(52,211,153,0.5)';
+          ctx.shadowBlur = 20;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+        
+        ctx.font = '12px monospace'; 
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'; 
+        const centsText = (cents > 0 ? '+' : '') + cents.toFixed(0) + '¢';
+        ctx.fillText(centsText, x - 18, cy - 20);
+      }
+    }
+
+    // Enhanced canvas setup
+    function fixCanvasDPI(){
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawOnce();
+    }
+    
+    window.addEventListener('resize', fixCanvasDPI);
+    fixCanvasDPI();
+
+    // Enhanced main detection loop
+    let rafId = null;
+    let detectionHistory = [];
+    
+    function drawLoop(){
+      if(rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(drawLoop);
+
+      if(!analyser || !dataBuf){
+        drawMeter(null);
+        return;
+      }
+
+      analyser.getFloatTimeDomainData(dataBuf);
+      const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
+      const f = autoCorrelate(dataBuf, sampleRate);
+      
+      if(f > 0) {
+        latestDetected = f;
+        detectionHistory.push(f);
+        if(detectionHistory.length > 10) detectionHistory.shift();
+      }
+
+      const detected = smoothFreq(latestDetected);
+      if(detected && detected > 0 && rootFreq && targetFreq){
+        detectedNoteEl.textContent = freqToNoteName(detected);
+        detectedFreqEl.textContent = detected.toFixed(1);
+        const cents = centsBetween(detected, targetFreq);
+        detectedCentsEl.textContent = cents.toFixed(1);
+
+        const inside = Math.abs(cents) <= marginCents;
+        insideEl.textContent = inside ? 'YES ✅' : 'no';
+        insideEl.className = inside ? 'green' : 'red';
+
+        // Enhanced scoring with visual feedback
+        if(inside){ 
+          if(!lastInsideAt) lastInsideAt = performance.now(); 
+          const dt = performance.now() - lastInsideAt; 
+          if(dt > holdThreshold){ 
+            score++; 
+            scoreEl.textContent = score; 
+            lastInsideAt = performance.now() + 800; // Prevent rapid scoring
+            flashSuccess(); 
+          } 
+        } else { 
+          lastInsideAt = 0; 
+        }
+
+        drawMeter(cents);
+      }else{
+        detectedNoteEl.textContent = '—'; 
+        detectedFreqEl.textContent = '—'; 
+        detectedCentsEl.textContent = '—'; 
+        insideEl.textContent = 'no'; 
+        insideEl.className = 'red';
+        drawMeter(null);
+      }
+    }
+
+    function flashSuccess(){
+      const old = canvas.style.boxShadow; 
+      canvas.style.boxShadow = '0 0 25px 8px rgba(52,211,153,0.4)'; 
+      setTimeout(()=>{ 
+        canvas.style.boxShadow = old; 
+      }, 500);
+      
+      // Audio feedback for success
+      if(audioCtx) {
+        const ctx = audioCtx;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(800, ctx.currentTime);
+        o.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+        o.connect(g);
+        g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.1, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        o.start(ctx.currentTime);
+        o.stop(ctx.currentTime + 0.2);
+      }
+    }
+
+    // Check browser compatibility
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      micStatus.textContent = '❌ Browser does not support microphone access'; 
+      startMicBtn.disabled = true; 
+      retryPermBtn.style.display = 'none';
+    }
+
+    // Initialize UI values
+    marginValue.textContent = marginCents; 
+    holdValue.textContent = holdThreshold; 
+    scoreEl.textContent = score;
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if(e.target.tagName === 'INPUT') return; // Don't interfere with inputs
+      
+      switch(e.key) {
+        case ' ': // Spacebar for new random note
+          e.preventDefault();
+          newRandomNoteBtn.click();
+          break;
+        case 'r': // R for replay
+          e.preventDefault();
+          if(!replayNoteBtn.disabled) replayNoteBtn.click();
+          break;
+        case '1': // 1 for root
+          e.preventDefault();
+          if(!playRootBtn.disabled) playRootBtn.click();
+          break;
+        case '2': // 2 for target
+          e.preventDefault();
+          if(!playTargetBtn.disabled) playTargetBtn.click();
+          break;
+        case 'm': // M for microphone toggle
+          e.preventDefault();
+          startMicBtn.click();
+          break;
+      }
+    });
+
+    // Add keyboard shortcut hints
+    const keyboardHint = document.createElement('div');
+    keyboardHint.className = 'hint small-muted';
+    keyboardHint.style.marginTop = '8px';
+    keyboardHint.innerHTML = '⌨️ Shortcuts: Space=New Note, R=Replay, 1=Root, 2=Target, M=Mic';
+    document.querySelector('.controls').appendChild(keyboardHint);
+
+    // Enhanced debug API
+    window.SingThirds = {
+      playRoot: ()=>{ updateUIValues(); if(rootFreq) playTone(rootFreq, 2.0); },
+      playTarget: ()=>{ updateUIValues(); if(targetFreq) playTone(targetFreq, 2.0); },
+      startMic: async ()=>{ try{ await startListeningWithMic(); }catch(e){ handleGetUserMediaError(e); }},
+      stopMic: stopListening,
+      newNote: ()=>{ newRandomNoteBtn.click(); },
+      getDetectionHistory: ()=>{ return detectionHistory.slice(); },
+      getCurrentFreqs: ()=>{ return {root: rootFreq, target: targetFreq, detected: latestDetected}; }
+    };
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+      stopListening();
+      if(fileObjectUrl) {
+        URL.revokeObjectURL(fileObjectUrl);
+      }
+    });
+
+  })();
+  </script>
+</body>
+</html>
